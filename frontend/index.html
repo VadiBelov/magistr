@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StenoMeet — Стенографирование встреч</title>
+    <style>
+        :root {
+            --bg: #0f0f1a; --panel: #1a1a2e; --accent: #4a6cf7;
+            --green: #2ecc71; --red: #e74c3c; --text: #e0e0e0;
+            --gold: #f39c12; --chat-bg: #131324; --hover: #1e1e38;
+            --border: #2a2a4a;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg); color: var(--text);
+            height: 100vh; overflow: hidden;
+        }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+
+        /* ВЕРХНЯЯ ПАНЕЛЬ НАВИГАЦИИ */
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; height: 50px; background: var(--panel);
+            border-bottom: 1px solid var(--border);
+        }
+        .topbar .logo { font-size: 20px; font-weight: bold; color: #fff; display: flex; align-items: center; gap: 10px; }
+        .topbar .logo span { color: var(--accent); }
+        .tabs { display: flex; gap: 4px; }
+        .tab {
+            padding: 12px 20px; cursor: pointer; color: #888;
+            font-size: 14px; border-bottom: 2px solid transparent;
+            transition: 0.2s; text-decoration: none;
+        }
+        .tab:hover { color: #ccc; background: var(--hover); }
+        .tab.active { color: #fff; border-bottom-color: var(--accent); }
+        .tab .badge {
+            background: var(--red); color: #fff; font-size: 10px;
+            padding: 2px 6px; border-radius: 10px; margin-left: 6px;
+        }
+        .user-area { display: flex; align-items: center; gap: 12px; }
+        .user-area .avatar {
+            width: 32px; height: 32px; border-radius: 50%; background: var(--accent);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; color: #fff; font-size: 14px;
+        }
+        .user-area button {
+            padding: 6px 12px; border: 1px solid #555; border-radius: 6px;
+            background: transparent; color: #ccc; cursor: pointer; font-size: 12px;
+        }
+        .user-area button:hover { background: #333; }
+
+        /* ОСНОВНОЙ КОНТЕЙНЕР */
+        .main-container { display: flex; height: calc(100vh - 50px); }
+
+        /* ВКЛАДКА: ВСТРЕЧИ */
+        .meeting-layout { display: flex; width: 100%; }
+        .sidebar {
+            width: 260px; background: var(--panel); padding: 14px;
+            display: flex; flex-direction: column; gap: 12px;
+            border-right: 1px solid var(--border); overflow-y: auto;
+        }
+        .sidebar h3 { font-size: 11px; text-transform: uppercase; color: #777; letter-spacing: 1px; margin: 8px 0 4px; }
+        .sidebar input[type="text"] {
+            width: 100%; padding: 9px 12px; border: 1px solid #444; border-radius: 8px;
+            background: var(--bg); color: #fff; font-size: 13px;
+        }
+        .sidebar button {
+            width: 100%; padding: 9px; border: none; border-radius: 8px;
+            cursor: pointer; font-size: 13px; font-weight: bold; color: #fff; margin-bottom: 4px;
+            transition: 0.2s;
+        }
+        .btn-primary { background: var(--accent); }
+        .btn-primary:hover { opacity: 0.85; }
+        .btn-success { background: #27ae60; }
+        .btn-danger { background: var(--red); font-size: 14px; padding: 12px; }
+        .btn-danger.recording { animation: pulse 1.5s infinite; }
+        .btn-camera { background: #8e44ad; }
+        .btn-camera.active { background: var(--red); }
+        @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(231,76,60,0.4); } 50% { box-shadow: 0 0 0 12px rgba(231,76,60,0); } }
+
+        .participant-card {
+            display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+            border-radius: 8px; background: var(--bg); font-size: 13px;
+        }
+        .participant-card .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+        .status-text { font-size: 11px; color: #777; text-align: center; }
+
+        /* ЦЕНТР */
+        .content-area { flex: 1; display: flex; flex-direction: column; background: #0a0a16; }
+        .video-row { display: flex; gap: 8px; padding: 10px; min-height: 150px; max-height: 250px; background: #000; flex-wrap: wrap; justify-content: center; align-items: center; }
+        .video-card {
+            position: relative; width: 220px; height: 160px; background: #1a1a2e;
+            border-radius: 10px; overflow: hidden; border: 2px solid #333;
+        }
+        .video-card video { width: 100%; height: 100%; object-fit: cover; }
+        .video-card .label { position: absolute; bottom: 6px; left: 8px; background: rgba(0,0,0,0.7); padding: 4px 10px; border-radius: 4px; font-size: 11px; }
+        .video-placeholder { display: flex; align-items: center; justify-content: center; height: 100%; color: #444; font-size: 40px; }
+
+        .transcript-box {
+            flex: 1; background: var(--panel); margin: 8px; border-radius: 10px;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        .transcript-box .header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 14px; border-bottom: 1px solid var(--border);
+        }
+        .transcript-box .header h3 { font-size: 13px; color: #fff; }
+        .transcript-box .header button {
+            padding: 4px 10px; border: 1px solid #555; border-radius: 4px;
+            background: transparent; color: #aaa; cursor: pointer; font-size: 11px;
+        }
+        .messages { flex: 1; padding: 10px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+        .msg {
+            padding: 8px 12px; border-radius: 8px; background: var(--bg);
+            animation: fadeIn 0.3s; font-size: 13px; line-height: 1.5;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .msg .speaker { font-weight: bold; font-size: 11px; margin-bottom: 2px; }
+        .msg .speaker.system { color: #888; }
+        .msg .time { font-size: 10px; color: #555; float: right; }
+        .summary-card {
+            background: #2a2000; border: 1px solid var(--gold);
+            padding: 10px 14px; border-radius: 8px; margin: 8px 14px; font-size: 13px;
+        }
+        .summary-card strong { color: var(--gold); }
+
+        /* ПРАВАЯ ПАНЕЛЬ — ЧАТ */
+        .chat-panel {
+            width: 290px; background: var(--chat-bg); display: flex;
+            flex-direction: column; border-left: 1px solid var(--border);
+        }
+        .chat-panel .header { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+        .chat-panel .header h3 { font-size: 13px; color: #fff; }
+        .chat-list { flex: 1; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+        .chat-msg { display: flex; gap: 6px; font-size: 13px; }
+        .chat-msg .author { font-weight: bold; white-space: nowrap; }
+        .chat-msg .time { font-size: 10px; color: #555; }
+        .chat-msg.system { color: #888; font-style: italic; }
+        .chat-input { display: flex; padding: 10px; gap: 8px; border-top: 1px solid var(--border); }
+        .chat-input input { flex: 1; padding: 8px 12px; border: 1px solid #444; border-radius: 20px; background: var(--bg); color: #fff; font-size: 13px; }
+        .chat-input button { padding: 8px 14px; border: none; border-radius: 20px; background: var(--accent); color: #fff; cursor: pointer; font-weight: bold; }
+
+        /* ВКЛАДКА: КОНТАКТЫ */
+        .contacts-layout { display: flex; width: 100%; }
+        .contacts-list {
+            width: 300px; background: var(--panel); padding: 14px;
+            border-right: 1px solid var(--border); overflow-y: auto;
+        }
+        .contacts-list h3 { color: #fff; margin-bottom: 12px; }
+        .contacts-list input {
+            width: 100%; padding: 9px 12px; border: 1px solid #444; border-radius: 8px;
+            background: var(--bg); color: #fff; font-size: 13px; margin-bottom: 14px;
+        }
+        .contact-card {
+            display: flex; align-items: center; gap: 12px; padding: 10px;
+            border-radius: 8px; cursor: pointer; transition: 0.2s;
+        }
+        .contact-card:hover { background: var(--hover); }
+        .contact-card .avatar {
+            width: 40px; height: 40px; border-radius: 50%; background: var(--accent);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; color: #fff; font-size: 16px; flex-shrink: 0;
+        }
+        .contact-card .info { flex: 1; }
+        .contact-card .name { font-weight: bold; font-size: 14px; }
+        .contact-card .status { font-size: 11px; color: #888; }
+        .contact-card .online { color: var(--green); }
+        .contact-card .offline { color: #666; }
+        .contact-actions button {
+            padding: 5px 10px; border: 1px solid #555; border-radius: 6px;
+            background: transparent; color: #ccc; cursor: pointer; font-size: 11px;
+        }
+        .contact-detail {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            color: #555; font-size: 14px;
+        }
+
+        /* ВКЛАДКА: ИСТОРИЯ */
+        .history-layout { display: flex; width: 100%; }
+        .history-list {
+            width: 320px; background: var(--panel); padding: 14px;
+            border-right: 1px solid var(--border); overflow-y: auto;
+        }
+        .history-list h3 { color: #fff; margin-bottom: 12px; }
+        .history-card {
+            padding: 10px 12px; border-radius: 8px; cursor: pointer;
+            margin-bottom: 6px; background: var(--bg); transition: 0.2s;
+        }
+        .history-card:hover { background: var(--hover); }
+        .history-card .title { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+        .history-card .meta { font-size: 11px; color: #777; }
+        .history-detail {
+            flex: 1; padding: 16px; overflow-y: auto;
+        }
+        .history-detail h3 { color: #fff; margin-bottom: 8px; }
+        .history-detail .text { background: var(--panel); padding: 14px; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+
+        /* МОДАЛЬНОЕ ОКНО */
+        .modal {
+            display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-box { background: var(--panel); padding: 28px; border-radius: 14px; width: 350px; }
+        .modal-box h2 { color: #fff; margin-bottom: 16px; font-size: 18px; }
+        .modal-box input { width: 100%; padding: 10px; margin-bottom: 8px; border: 1px solid #444; border-radius: 8px; background: var(--bg); color: #fff; }
+        .modal-box button { width: 100%; padding: 10px; margin-top: 6px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold; }
+        .modal-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+        .modal-tab { flex: 1; text-align: center; padding: 8px; border-radius: 6px; cursor: pointer; color: #888; font-size: 13px; }
+        .modal-tab.active { background: var(--accent); color: #fff; }
+        .error-text { color: var(--red); text-align: center; margin-top: 8px; font-size: 13px; }
+
+        .hidden { display: none !important; }
+        .empty { text-align: center; color: #555; margin-top: 60px; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+<!-- АВТОРИЗАЦИЯ -->
+<div id="authModal" class="modal">
+    <div class="modal-box">
+        <h2>🎙️ StenoMeet</h2>
+        <div class="modal-tabs">
+            <div class="modal-tab active" onclick="switchAuth('login')">Вход</div>
+            <div class="modal-tab" onclick="switchAuth('register')">Регистрация</div>
+        </div>
+        <div id="loginBlock">
+            <input type="text" id="loginUser" placeholder="Логин">
+            <input type="password" id="loginPass" placeholder="Пароль">
+            <button onclick="login()" style="background:#2ecc71;">Войти</button>
+        </div>
+        <div id="registerBlock" class="hidden">
+            <input type="text" id="regUser" placeholder="Логин">
+            <input type="email" id="regEmail" placeholder="Email">
+            <input type="password" id="regPass" placeholder="Пароль">
+            <button onclick="register()" style="background:#4a6cf7;">Зарегистрироваться</button>
+        </div>
+        <div id="authError" class="error-text"></div>
+    </div>
+</div>
+
+<!-- ОСНОВНОЙ ИНТЕРФЕЙС -->
+<div id="appUI" class="hidden" style="height:100vh;">
+    <!-- ТОПБАР -->
+    <div class="topbar">
+        <div class="logo">🎙️ <span>StenoMeet</span></div>
+        <div class="tabs" id="navTabs">
+            <div class="tab active" data-tab="meeting">📹 Встречи</div>
+            <div class="tab" data-tab="contacts">👥 Контакты <span class="badge">3</span></div>
+            <div class="tab" data-tab="history">📋 История</div>
+        </div>
+        <div class="user-area">
+            <div class="avatar" id="userAvatar">U</div>
+            <span id="displayUser" style="color:#ccc;"></span>
+            <button onclick="logout()">Выйти</button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <!-- ============ ВКЛАДКА: ВСТРЕЧИ ============ -->
+        <div id="tab-meeting" class="meeting-layout">
+            <div class="sidebar">
+                <h3>📋 Встреча</h3>
+                <input type="text" id="roomIdInput" placeholder="ID комнаты">
+                <button class="btn-primary" onclick="createRoom()">➕ Создать комнату</button>
+                <button class="btn-success" onclick="joinRoom()">🔗 Подключиться</button>
+
+                <div id="recordingSection" class="hidden">
+                    <button class="btn-danger" id="recordBtn" onclick="toggleRecording()">🎤 Начать запись</button>
+                    <button class="btn-camera" id="cameraBtn" onclick="toggleCamera()">📹 Камера</button>
+                    <div class="status-text" id="recStatus"></div>
+                </div>
+
+                <h3>👥 Участники</h3>
+                <div id="participantsList"><div class="empty">Нет участников</div></div>
+
+                <h3>📤 Файл</h3>
+                <input type="file" id="audioFile" accept=".mp3,.wav,.ogg,.flac,.m4a,.webm" style="font-size:11px;color:#ccc;">
+                <button class="btn-primary" onclick="uploadFile()" style="font-size:12px;">Загрузить и расшифровать</button>
+                <div class="status-text" id="uploadStatus"></div>
+                <a id="downloadLink" class="hidden" download></a>
+            </div>
+
+            <div class="content-area">
+                <div class="video-row" id="videoGrid">
+                    <div class="video-card" id="myVideoCard" style="display:none;">
+                        <video id="myVideo" autoplay muted playsinline></video>
+                        <div class="label">Я</div>
+                    </div>
+                </div>
+
+                <div class="transcript-box">
+                    <div class="header">
+                        <h3>📝 Расшифровка</h3>
+                        <div>
+                            <button onclick="downloadTranscript()">📥 .docx</button>
+                            <button onclick="clearTranscript()">🗑 Очистить</button>
+                        </div>
+                    </div>
+                    <div class="messages" id="transcript">
+                        <div class="empty">Расшифровка появится здесь после обработки записи или загрузки файла</div>
+                    </div>
+                    <div id="summaryArea"></div>
+                </div>
+            </div>
+
+            <div class="chat-panel">
+                <div class="header"><h3>💬 Чат встречи</h3></div>
+                <div class="chat-list" id="chatMessages">
+                    <div class="chat-msg system">Подключитесь к комнате, чтобы начать чат</div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="chatInput" placeholder="Сообщение..." onkeypress="if(event.key==='Enter') sendChat()">
+                    <button onclick="sendChat()">▶</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ ВКЛАДКА: КОНТАКТЫ ============ -->
+        <div id="tab-contacts" class="contacts-layout hidden">
+            <div class="contacts-list">
+                <h3>👥 Контакты</h3>
+                <input type="text" id="contactSearch" placeholder="🔍 Поиск контактов..." oninput="filterContacts()">
+                <div id="contactsContainer">
+                    <!-- Заполняется динамически -->
+                </div>
+            </div>
+            <div class="contact-detail" id="contactDetail">
+                <div class="empty">Выберите контакт для просмотра</div>
+            </div>
+        </div>
+
+        <!-- ============ ВКЛАДКА: ИСТОРИЯ ============ -->
+        <div id="tab-history" class="history-layout hidden">
+            <div class="history-list">
+                <h3>📋 История встреч</h3>
+                <div id="historyContainer">
+                    <div class="empty" style="margin-top:20px;">Нет записей</div>
+                </div>
+            </div>
+            <div class="history-detail" id="historyDetail">
+                <div class="empty">Выберите запись для просмотра</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
+let token = localStorage.getItem('token');
+let ws = null;
+let isRecording = false;
+let isCameraOn = false;
+let currentRoom = null;
+let currentUser = '';
+let transcriptSegments = [];
+let lastTaskId = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let localStream = null;
+let activeTab = 'meeting';
+
+// Демо-контакты и история (хранятся в localStorage)
+let contacts = JSON.parse(localStorage.getItem('steno_contacts') || '[]');
+let historyRecords = JSON.parse(localStorage.getItem('steno_history') || '[]');
+
+// ==================== АВТОРИЗАЦИЯ ====================
+function switchAuth(tab) {
+    document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('loginBlock').classList.toggle('hidden', tab !== 'login');
+    document.getElementById('registerBlock').classList.toggle('hidden', tab !== 'register');
+    document.getElementById('authError').textContent = '';
+}
+
+async function register() {
+    const resp = await fetch('/api/register', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+            username: document.getElementById('regUser').value,
+            email: document.getElementById('regEmail').value,
+            password: document.getElementById('regPass').value
+        })
+    });
+    const d = await resp.json();
+    document.getElementById('authError').textContent = d.message || d.detail || 'OK';
+}
+
+async function login() {
+    const fd = new URLSearchParams();
+    fd.append('username', document.getElementById('loginUser').value);
+    fd.append('password', document.getElementById('loginPass').value);
+    const resp = await fetch('/api/login', {method:'POST', body:fd});
+    const d = await resp.json();
+    if (d.access_token) {
+        token = d.access_token;
+        localStorage.setItem('token', token);
+        currentUser = document.getElementById('loginUser').value;
+        initApp();
+    } else {
+        document.getElementById('authError').textContent = d.detail || 'Ошибка';
+    }
+}
+
+function logout() {
+    localStorage.removeItem('token');
+    if (ws) ws.close();
+    if (localStream) localStream.getTracks().forEach(t => t.stop());
+    location.reload();
+}
+
+function initApp() {
+    document.getElementById('authModal').classList.add('hidden');
+    document.getElementById('appUI').classList.remove('hidden');
+    document.getElementById('displayUser').textContent = currentUser;
+    document.getElementById('userAvatar').textContent = currentUser[0].toUpperCase();
+    initTabs();
+    renderContacts();
+    renderHistory();
+    addDemoData();
+}
+
+// ==================== ВКЛАДКИ ====================
+function initTabs() {
+    document.querySelectorAll('#navTabs .tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('#navTabs .tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            activeTab = this.dataset.tab;
+            document.getElementById('tab-meeting').classList.toggle('hidden', activeTab !== 'meeting');
+            document.getElementById('tab-contacts').classList.toggle('hidden', activeTab !== 'contacts');
+            document.getElementById('tab-history').classList.toggle('hidden', activeTab !== 'history');
+        });
+    });
+}
+
+// ==================== ВСТРЕЧИ (без изменений) ====================
+async function createRoom() {
+    const resp = await fetch('/api/room/create', {method:'POST'});
+    const d = await resp.json();
+    document.getElementById('roomIdInput').value = d.room_id;
+    connectToRoom(d.room_id);
+}
+
+function joinRoom() {
+    const id = document.getElementById('roomIdInput').value.trim();
+    if (!id) return;
+    connectToRoom(id);
+}
+
+function connectToRoom(roomId) {
+    if (ws) ws.close();
+    currentRoom = roomId;
+    document.getElementById('recordingSection').classList.remove('hidden');
+    document.getElementById('recStatus').textContent = '';
+    document.getElementById('transcript').innerHTML = '<div class="empty">Ожидание записи...</div>';
+    document.getElementById('summaryArea').innerHTML = '';
+    document.getElementById('chatMessages').innerHTML = '<div class="chat-msg system">Комната: ' + roomId + '</div>';
+
+    ws = new WebSocket(`ws://127.0.0.1:8001/api/ws/room/${roomId}?user_id=${currentUser}`);
+    ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.type === 'participants') updateParticipants(data.participants);
+        if (data.type === 'chat') addChatMessage(data.author, data.text);
+    };
+}
+
+function updateParticipants(list) {
+    document.getElementById('participantsList').innerHTML = list.map(p =>
+        `<div class="participant-card"><div class="dot"></div><span>${p}${p===currentUser?' (вы)':''}</span></div>`
+    ).join('');
+}
+
+async function toggleRecording() {
+    const btn = document.getElementById('recordBtn');
+    const status = document.getElementById('recStatus');
+
+    if (!isRecording) {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm' });
+            recordedChunks = [];
+            mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+            mediaRecorder.onstop = async () => {
+                await new Promise(r => setTimeout(r, 200));
+                const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+                if (blob.size < 100) { status.textContent = 'Слишком тихо'; stream.getTracks().forEach(t => t.stop()); return; }
+                const file = new File([blob], `rec_${Date.now()}.webm`, { type: 'audio/webm' });
+                status.textContent = '⏳ Отправка...';
+                const fd = new FormData(); fd.append('file', file);
+                const resp = await fetch('/api/upload', {method:'POST', body:fd});
+                const d = await resp.json();
+                if (d.status === 'processing') { lastTaskId = d.task_id; await pollResult(d.task_id); }
+                stream.getTracks().forEach(t => t.stop());
+            };
+            mediaRecorder.start();
+            isRecording = true;
+            btn.textContent = '⏹ Остановить';
+            btn.classList.add('recording');
+            status.textContent = '● Запись...';
+        } catch(e) { status.textContent = 'Нет микрофона'; }
+    } else {
+        if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+        isRecording = false;
+        btn.textContent = '🎤 Начать запись';
+        btn.classList.remove('recording');
+    }
+}
+
+async function pollResult(taskId) {
+    const status = document.getElementById('recStatus');
+    for (let i = 0; i < 120; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const resp = await fetch(`/api/result/${taskId}`);
+        const d = await resp.json();
+        if (d.status === 'done') { showResult(d.result); status.textContent = '✅ Готово!'; addHistory(d.result); return; }
+        status.textContent = `⏳ Распознавание... (${i+1})`;
+    }
+    status.textContent = 'Таймаут';
+}
+
+function showResult(result) {
+    document.getElementById('transcript').innerHTML = '';
+    transcriptSegments = [];
+    for (const seg of result.segments) addTranscriptMsg(seg.speaker, seg.text);
+    if (result.summary) {
+        document.getElementById('summaryArea').innerHTML = `<div class="summary-card"><strong>📋 Итог:</strong> ${result.summary}</div>`;
+    }
+    lastTaskId = result.file_id || lastTaskId;
+}
+
+function addTranscriptMsg(speaker, text) {
+    transcriptSegments.push({speaker, text});
+    const container = document.getElementById('transcript');
+    if (container.querySelector('.empty')) container.innerHTML = '';
+    const div = document.createElement('div'); div.className = 'msg';
+    const now = new Date(); const time = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+    const color = '#' + [1,2,3].map(i => ('00' + ((speaker.split('').reduce((a,c)=>a+c.charCodeAt(0),0) >> (i*8)) & 0xFF).toString(16)).slice(-2)).join('');
+    div.innerHTML = `<div class="speaker ${speaker==='System'?'system':''}" style="color:${speaker==='System'?'#888':color}">${speaker}</div><div class="time">${time}</div><div>${text}</div>`;
+    container.appendChild(div); container.scrollTop = container.scrollHeight;
+}
+
+async function toggleCamera() {
+    const btn = document.getElementById('cameraBtn');
+    const card = document.getElementById('myVideoCard');
+    const video = document.getElementById('myVideo');
+    if (!isCameraOn) {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = localStream;
+            card.style.display = 'block';
+            isCameraOn = true;
+            btn.textContent = '📹 Выкл. камеру';
+            btn.classList.add('active');
+        } catch(e) { alert('Нет камеры'); }
+    } else {
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
+        video.srcObject = null; card.style.display = 'none';
+        isCameraOn = false;
+        btn.textContent = '📹 Камера';
+        btn.classList.remove('active');
+    }
+}
+
+function sendChat() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'chat', text }));
+    addChatMessage(currentUser, text);
+    input.value = '';
+}
+
+function addChatMessage(author, text) {
+    const container = document.getElementById('chatMessages');
+    if (container.querySelector('.chat-msg.system') && container.children.length === 1 && author !== 'System') container.innerHTML = '';
+    const now = new Date(); const time = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+    const color = '#' + [1,2,3].map(i => ('00' + ((author.split('').reduce((a,c)=>a+c.charCodeAt(0),0) >> (i*8)) & 0xFF).toString(16)).slice(-2)).join('');
+    const div = document.createElement('div'); div.className = 'chat-msg';
+    if (author === 'System') div.classList.add('system');
+    div.innerHTML = `<span class="author" style="color:${color}">${author}:</span><span>${text}</span><span class="time">${time}</span>`;
+    container.appendChild(div); container.scrollTop = container.scrollHeight;
+}
+
+async function uploadFile() {
+    const fileInput = document.getElementById('audioFile');
+    const status = document.getElementById('uploadStatus');
+    if (!fileInput.files[0]) return;
+    status.textContent = '⏳...';
+    const fd = new FormData(); fd.append('file', fileInput.files[0]);
+    const resp = await fetch('/api/upload', {method:'POST', body:fd});
+    const d = await resp.json();
+    if (d.status !== 'processing') { status.textContent = 'Ошибка'; return; }
+    lastTaskId = d.task_id; status.textContent = '⏳...';
+    let result = null;
+    for (let i = 0; i < 120; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const check = await fetch(`/api/result/${d.task_id}`); const cd = await check.json();
+        if (cd.status === 'done') { result = cd.result; break; }
+        status.textContent = `⏳... (${i+1})`;
+    }
+    if (result) {
+        showResult(result); addHistory(result);
+        status.textContent = '✅ Готово!';
+        const link = document.getElementById('downloadLink');
+        link.href = `/api/export/${d.task_id}`; link.classList.remove('hidden'); link.textContent = '📥 Скачать .docx';
+    }
+}
+
+function downloadTranscript() {
+    if (lastTaskId) window.open(`/api/export/${lastTaskId}`, '_blank');
+    else alert('Сначала загрузите файл или завершите запись');
+}
+
+function clearTranscript() {
+    transcriptSegments = [];
+    document.getElementById('transcript').innerHTML = '<div class="empty">Расшифровка очищена</div>';
+    document.getElementById('summaryArea').innerHTML = '';
+}
+
+// ==================== КОНТАКТЫ ====================
+function addDemoData() {
+    if (contacts.length === 0) {
+        contacts = [
+            { username: 'alex', email: 'alex@mail.com', online: true, lastSeen: 'сейчас' },
+            { username: 'maria', email: 'maria@mail.com', online: false, lastSeen: '5 мин назад' },
+            { username: 'ivan', email: 'ivan@mail.com', online: true, lastSeen: 'сейчас' },
+        ];
+        saveContacts();
+    }
+    if (historyRecords.length === 0) {
+        historyRecords = [
+            { id: 'demo1', filename: 'Встреча команды', date: new Date().toLocaleString(), language: 'ru', full_text: 'Демо-запись. Загрузите файл или сделайте запись.', summary: 'Пример краткого итога', segments: [{speaker:'Speaker_0', text:'Демо-запись.', start:0, end:2}] },
+        ];
+        saveHistory();
+    }
+    renderContacts();
+    renderHistory();
+}
+
+function saveContacts() { localStorage.setItem('steno_contacts', JSON.stringify(contacts)); }
+function saveHistory() { localStorage.setItem('steno_history', JSON.stringify(historyRecords)); }
+
+function renderContacts(filter = '') {
+    const container = document.getElementById('contactsContainer');
+    const filtered = contacts.filter(c => c.username.toLowerCase().includes(filter.toLowerCase()));
+    container.innerHTML = filtered.map(c => `
+        <div class="contact-card" onclick="showContact('${c.username}')">
+            <div class="avatar">${c.username[0].toUpperCase()}</div>
+            <div class="info">
+                <div class="name">${c.username}</div>
+                <div class="status ${c.online ? 'online' : 'offline'}">${c.online ? '🟢 Онлайн' : '⚫ Был(а) ' + c.lastSeen}</div>
+            </div>
+            <div class="contact-actions">
+                <button onclick="event.stopPropagation(); inviteContact('${c.username}')">📨 Пригласить</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function filterContacts() {
+    renderContacts(document.getElementById('contactSearch').value);
+}
+
+function showContact(username) {
+    const contact = contacts.find(c => c.username === username);
+    if (!contact) return;
+    document.getElementById('contactDetail').innerHTML = `
+        <div style="text-align:center;padding:40px;">
+            <div class="avatar" style="width:80px;height:80px;font-size:32px;margin:0 auto 16px;">${contact.username[0].toUpperCase()}</div>
+            <h3 style="color:#fff;">${contact.username}</h3>
+            <p style="color:#888;">${contact.email}</p>
+            <p class="${contact.online ? 'online' : 'offline'}" style="font-size:13px;">${contact.online ? '🟢 Онлайн' : '⚫ ' + contact.lastSeen}</p>
+            <button class="btn-primary" style="margin-top:16px;" onclick="inviteContact('${contact.username}')">📨 Пригласить в комнату</button>
+        </div>
+    `;
+}
+
+function inviteContact(username) {
+    if (currentRoom) {
+        document.getElementById('roomIdInput').value = currentRoom;
+        alert(`Пригласите пользователя ${username} в комнату: ${currentRoom}\nПусть вставит этот ID и нажмёт "Подключиться"`);
+    } else {
+        alert('Сначала создайте комнату во вкладке "Встречи"');
+    }
+}
+
+// ==================== ИСТОРИЯ ====================
+function addHistory(result) {
+    if (!result || !result.full_text) return;
+    historyRecords.unshift({
+        id: result.file_id || Date.now().toString(),
+        filename: result.filename || 'Запись',
+        date: new Date().toLocaleString(),
+        language: result.language || 'ru',
+        full_text: result.full_text,
+        summary: result.summary || '',
+        segments: result.segments || []
+    });
+    if (historyRecords.length > 50) historyRecords = historyRecords.slice(0, 50);
+    saveHistory();
+    renderHistory();
+}
+
+function renderHistory() {
+    const container = document.getElementById('historyContainer');
+    if (historyRecords.length === 0) {
+        container.innerHTML = '<div class="empty" style="margin-top:20px;">Нет записей</div>';
+        return;
+    }
+    container.innerHTML = historyRecords.map(r => `
+        <div class="history-card" onclick="showHistory('${r.id}')">
+            <div class="title">${r.filename}</div>
+            <div class="meta">${r.date} · ${r.language.toUpperCase()} · ${(r.full_text||'').substring(0, 50)}...</div>
+        </div>
+    `).join('');
+}
+
+function showHistory(id) {
+    const record = historyRecords.find(r => r.id === id);
+    if (!record) return;
+    let html = `<h3>${record.filename}</h3><p style="color:#888;margin-bottom:12px;">${record.date} · ${record.language}</p>`;
+    if (record.summary) html += `<div class="summary-card"><strong>📋 Итог:</strong> ${record.summary}</div>`;
+    html += '<div class="text">' + (record.segments || []).map(s => `<p><b style="color:#4a6cf7;">${s.speaker}:</b> ${s.text}</p>`).join('') + '</div>';
+    document.getElementById('historyDetail').innerHTML = html;
+}
+
+// ==================== СТАРТ ====================
+if (token) {
+    fetch('/api/me', {headers:{'Authorization':`Bearer ${token}`}})
+        .then(r => r.json())
+        .then(u => { currentUser = u.username; initApp(); })
+        .catch(() => { localStorage.removeItem('token'); token = null; });
+}
+</script>
+</body>
+</html>
